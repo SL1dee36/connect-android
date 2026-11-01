@@ -126,6 +126,26 @@ interface ApiService {
     suspend fun resolveBug(
         @Body body: Map<String, Long>
     ): Response<Map<String, Any>>
+
+    // Push & FCM
+    @POST("push/fcm-token")
+    suspend fun registerFcmToken(
+        @Header("Authorization") auth: String?,
+        @Body body: Map<String, String>
+    ): Response<Map<String, Any>>
+
+    @DELETE("push/fcm-token")
+    suspend fun removeFcmToken(
+        @Header("Authorization") auth: String?,
+        @Body body: Map<String, String>
+    ): Response<Map<String, Any>>
+
+    // Contact Sync
+    @POST("contacts/match-phones")
+    suspend fun matchPhones(
+        @Header("Authorization") auth: String?,
+        @Body body: Map<String, List<String>>
+    ): Response<com.connect.app.data.model.MatchPhonesResponse>
 }
 
 class ApiClient(private val prefs: PreferencesManager) {

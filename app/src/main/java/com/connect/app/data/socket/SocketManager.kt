@@ -1,6 +1,7 @@
 package com.connect.app.data.socket
 
 import android.util.Log
+import com.connect.app.ConnectApplication
 import com.connect.app.data.model.AvatarHistoryItem
 import com.connect.app.data.model.ChatMessage
 import com.connect.app.data.model.FriendItem
@@ -144,6 +145,18 @@ class SocketManager(private val prefs: PreferencesManager) {
                 s.emit("get_my_profile", username)
                 s.emit("get_avatar_history", username)
             }
+            val fcmToken = prefs.getFcmToken()
+            val authToken = prefs.getToken()
+            if (!fcmToken.isNullOrBlank() && !authToken.isNullOrBlank()) {
+                scope.launch(Dispatchers.IO) {
+                    try {
+                        ConnectApplication.instance.apiClient.service.registerFcmToken(
+                            auth = "Bearer $authToken",
+                            body = mapOf("token" to fcmToken)
+                        )
+                    } catch (_: Exception) {}
+                }
+            }
         }
 
         s.on(Socket.EVENT_DISCONNECT) {
@@ -254,9 +267,43 @@ class SocketManager(private val prefs: PreferencesManager) {
                         current.add(msg)
                     }
                     _currentRoomMessages.value = current
+                } else {
+                    val myUsername = prefs.getCurrentUser()?.username ?: prefs.getBiometricUser()?.username
+                    if (myUsername != null && msg.author != myUsername && !msg.isSystem) {
+                        val isGroup = _userGroups.value.contains(msg.room)
+                        val text = when {
+                            msg.isAudio -> "Голосовое сообщение"
+                            msg.isVideo -> "Видеосообщение"
+                            msg.isImage -> "Фотография"
+                            else -> msg.message
+                        }
+                        com.connect.app.notifications.NotificationHelper.showMessageNotification(
+                            context = ConnectApplication.instance,
+                            room = msg.room,
+                            author = msg.authorName,
+                            message = text,
+                            avatarUrl = null,
+                            isGroup = isGroup
+                        )
+                    }
                 }
             } catch (e: Exception) {
                 Log.e(tag, "Error parsing receive_message", e)
+            }
+        }
+
+        s.on("dm_notification") { args ->
+            val data = args.getOrNull(0) as? JSONObject ?: return@on
+            val room = data.optString("room", "")
+            if (room.isNotBlank() && room != _currentRoom.value) {
+                com.connect.app.notifications.NotificationHelper.showMessageNotification(
+                    context = ConnectApplication.instance,
+                    room = room,
+                    author = data.optString("author", "Connect"),
+                    message = data.optString("message", "Новое сообщение"),
+                    avatarUrl = data.optString("avatar", null),
+                    isGroup = false
+                )
             }
         }
 
@@ -464,16 +511,48 @@ class SocketManager(private val prefs: PreferencesManager) {
             }
         }
 
-        s.on("incoming_call") { args ->
-            val data = args.getOrNull(0) as? JSONObject ?: return@on
-            val map = mutableMapOf<String, Any>()
-            val keys = data.keys()
-            while (keys.hasNext()) {
-                val k = keys.next()
-                map[k] = data.get(k)
+        val handleIncomingCallObj = { raw: Any? ->
+            val obj = when (raw) {
+                is JSONObject -> raw
+                is String -> JSONObject(raw)
+                else -> JSONObject(raw.toString())
             }
-            scope.launch { _incomingCallEvents.emit(map) }
+            ConnectApplication.instance.callManager.handleIncomingCall(obj)
         }
+        s.on("incoming_call") { args -> args.getOrNull(0)?.let { handleIncomingCallObj(it) } }
+        s.on("callUser") { args -> args.getOrNull(0)?.let { handleIncomingCallObj(it) } }
+
+        val handleCallAcceptedObj = { raw: Any? ->
+            val obj = when (raw) {
+                is JSONObject -> raw
+                is String -> JSONObject(raw)
+                else -> JSONObject(raw.toString())
+            }
+            ConnectApplication.instance.callManager.handleCallAccepted(obj)
+        }
+        s.on("call_accepted") { args -> args.getOrNull(0)?.let { handleCallAcceptedObj(it) } }
+        s.on("callAccepted") { args -> args.getOrNull(0)?.let { handleCallAcceptedObj(it) } }
+
+        val handleIceCandidateObj = { raw: Any? ->
+            val obj = when (raw) {
+                is JSONObject -> raw
+                is String -> JSONObject(raw)
+                else -> JSONObject(raw.toString())
+            }
+            ConnectApplication.instance.callManager.handleRemoteIceCandidate(obj)
+        }
+        s.on("ice_candidate") { args -> args.getOrNull(0)?.let { handleIceCandidateObj(it) } }
+        s.on("ice-candidate") { args -> args.getOrNull(0)?.let { handleIceCandidateObj(it) } }
+
+        val handleCallEnded = {
+            ConnectApplication.instance.callManager.endCall(notifyServer = false)
+        }
+        s.on("call_busy") { handleCallEnded() }
+        s.on("call_failed") { handleCallEnded() }
+        s.on("call_rejected") { handleCallEnded() }
+        s.on("call_cancelled") { handleCallEnded() }
+        s.on("call_ended") { handleCallEnded() }
+        s.on("callEnded") { handleCallEnded() }
 
         s.on("error_message") { args ->
             val data = args.getOrNull(0) as? JSONObject
@@ -682,7 +761,8 @@ class SocketManager(private val prefs: PreferencesManager) {
         newUsername: String? = null,
         birthday: String? = null,
         personalChannel: String? = null,
-        profileColor: String? = null
+        profileColor: String? = null,
+        phonePrivacy: String? = null
     ) {
         // Optimistic local update
         val cur = _myProfile.value
@@ -693,7 +773,8 @@ class SocketManager(private val prefs: PreferencesManager) {
             notificationsEnabled = if (notificationsEnabled) 1 else 0,
             birthday = birthday ?: cur?.birthday,
             personalChannel = personalChannel ?: cur?.personalChannel,
-            profileColor = profileColor ?: cur?.profileColor
+            profileColor = profileColor ?: cur?.profileColor,
+            phonePrivacy = phonePrivacy ?: cur?.phonePrivacy ?: "everyone"
         )
         _myProfile.value = updatedProfile
 
@@ -713,6 +794,7 @@ class SocketManager(private val prefs: PreferencesManager) {
             if (birthday != null) put("birthday", birthday)
             if (personalChannel != null) put("personal_channel", personalChannel)
             if (profileColor != null) put("profile_color", profileColor)
+            if (phonePrivacy != null) put("phone_privacy", phonePrivacy)
         }
         socket?.emit("update_profile", json)
 
@@ -730,7 +812,8 @@ class SocketManager(private val prefs: PreferencesManager) {
                         notificationsEnabled = notificationsEnabled,
                         birthday = birthday,
                         personalChannel = personalChannel,
-                        profileColor = profileColor
+                        profileColor = profileColor,
+                        phonePrivacy = phonePrivacy
                     )
                     val resp = app.apiClient.service.updateProfile(auth, req)
                     if (resp.isSuccessful) {
@@ -765,5 +848,70 @@ class SocketManager(private val prefs: PreferencesManager) {
             personalChannel = cur?.personalChannel,
             profileColor = colorId
         )
+    }
+
+    // ─── WebRTC Call Signaling Methods ───
+    fun initiateCall(userToCall: String, signalData: JSONObject, callType: String, room: String, name: String) {
+        val s = socket ?: return
+        val json = JSONObject().apply {
+            put("userToCall", userToCall)
+            put("signalData", signalData)
+            put("from", prefs.getCurrentUser()?.username ?: "")
+            put("name", name)
+            put("callType", callType)
+            put("room", room)
+        }
+        s.emit("callUser", json)
+    }
+
+    fun answerCall(caller: String, signalData: JSONObject, room: String, callType: String) {
+        val s = socket ?: return
+        val json = JSONObject().apply {
+            put("to", caller)
+            put("signal", signalData)
+            put("room", room)
+            put("callType", callType)
+        }
+        s.emit("answerCall", json)
+    }
+
+    fun sendIceCandidate(targetUser: String, candidate: JSONObject) {
+        val s = socket ?: return
+        val json = JSONObject().apply {
+            put("to", targetUser)
+            put("candidate", candidate)
+        }
+        s.emit("ice-candidate", json)
+    }
+
+    fun rejectCall(caller: String, room: String, callType: String) {
+        val s = socket ?: return
+        val json = JSONObject().apply {
+            put("to", caller)
+            put("room", room)
+            put("callType", callType)
+        }
+        s.emit("call_rejected", json)
+    }
+
+    fun cancelCall(targetUser: String, room: String, callType: String) {
+        val s = socket ?: return
+        val json = JSONObject().apply {
+            put("to", targetUser)
+            put("room", room)
+            put("callType", callType)
+        }
+        s.emit("call_cancelled", json)
+    }
+
+    fun endCall(targetUser: String, room: String, callType: String, duration: Int) {
+        val s = socket ?: return
+        val json = JSONObject().apply {
+            put("to", targetUser)
+            put("room", room)
+            put("callType", callType)
+            put("duration", duration)
+        }
+        s.emit("endCall", json)
     }
 }

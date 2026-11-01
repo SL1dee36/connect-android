@@ -3,11 +3,17 @@ package com.connect.app.ui.screens.settings
 import android.content.Intent
 import android.net.Uri
 import android.widget.Toast
+import android.media.RingtoneManager
+import android.app.Activity
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.contract.ActivityResultContracts
 import androidx.activity.compose.BackHandler
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
 import androidx.compose.foundation.horizontalScroll
+import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.rememberScrollState
 import android.os.Build
 import androidx.compose.material3.dynamicDarkColorScheme
 import androidx.compose.material3.dynamicLightColorScheme
@@ -58,6 +64,7 @@ import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.Button
 import androidx.compose.material3.CircularProgressIndicator
 import androidx.compose.material3.ExperimentalMaterial3Api
+import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
@@ -140,10 +147,73 @@ fun SettingsScreen(onBack: () -> Unit) {
     var sliderRadius by remember(bubbleRadius) { mutableFloatStateOf(bubbleRadius) }
     var sliderFontSize by remember(fontSize) { mutableFloatStateOf(fontSize) }
 
-    // Notification toggles state
-    var notificationsSoundEnabled by remember { mutableStateOf(true) }
-    var notificationsVibrationEnabled by remember { mutableStateOf(true) }
-    var notificationsPreviewEnabled by remember { mutableStateOf(true) }
+    // Notification preferences state
+    var dmSoundEnabled by remember { mutableStateOf(app.prefs.isDmSoundEnabled()) }
+    var dmVibrationEnabled by remember { mutableStateOf(app.prefs.isDmVibrationEnabled()) }
+    var dmPreviewEnabled by remember { mutableStateOf(app.prefs.isDmPreviewEnabled()) }
+    var dmRingtoneUri by remember { mutableStateOf(app.prefs.getDmRingtoneUri()) }
+
+    var groupSoundEnabled by remember { mutableStateOf(app.prefs.isGroupSoundEnabled()) }
+    var groupVibrationEnabled by remember { mutableStateOf(app.prefs.isGroupVibrationEnabled()) }
+    var groupPreviewEnabled by remember { mutableStateOf(app.prefs.isGroupPreviewEnabled()) }
+    var groupRingtoneUri by remember { mutableStateOf(app.prefs.getGroupRingtoneUri()) }
+
+    var callsVibrationEnabled by remember { mutableStateOf(app.prefs.isCallsVibrationEnabled()) }
+    var callsRingtoneUri by remember { mutableStateOf(app.prefs.getCallsRingtoneUri()) }
+
+    var ringtonePickerTarget by remember { mutableStateOf<String?>(null) }
+
+    val ringtonePickerLauncher = rememberLauncherForActivityResult(
+        contract = ActivityResultContracts.StartActivityForResult()
+    ) { result ->
+        if (result.resultCode == Activity.RESULT_OK) {
+            val pickedUri: Uri? = if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
+                result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI, Uri::class.java)
+            } else {
+                @Suppress("DEPRECATION")
+                result.data?.getParcelableExtra(RingtoneManager.EXTRA_RINGTONE_PICKED_URI)
+            }
+            val uriStr = pickedUri?.toString()
+            when (ringtonePickerTarget) {
+                "dm" -> {
+                    dmRingtoneUri = uriStr
+                    app.prefs.setDmRingtoneUri(uriStr)
+                }
+                "group" -> {
+                    groupRingtoneUri = uriStr
+                    app.prefs.setGroupRingtoneUri(uriStr)
+                }
+                "call" -> {
+                    callsRingtoneUri = uriStr
+                    app.prefs.setCallsRingtoneUri(uriStr)
+                }
+            }
+        }
+    }
+
+    fun getRingtoneDisplayName(uriString: String?, defaultName: String = "По умолчанию (Connect)"): String {
+        if (uriString.isNullOrBlank()) return defaultName
+        return try {
+            val ringtone = RingtoneManager.getRingtone(context, Uri.parse(uriString))
+            ringtone?.getTitle(context) ?: defaultName
+        } catch (_: Exception) {
+            defaultName
+        }
+    }
+
+    fun launchRingtonePicker(target: String, existingUriStr: String?, ringtoneType: Int) {
+        ringtonePickerTarget = target
+        val intent = Intent(RingtoneManager.ACTION_RINGTONE_PICKER).apply {
+            putExtra(RingtoneManager.EXTRA_RINGTONE_TYPE, ringtoneType)
+            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_DEFAULT, true)
+            putExtra(RingtoneManager.EXTRA_RINGTONE_SHOW_SILENT, true)
+            putExtra(RingtoneManager.EXTRA_RINGTONE_DEFAULT_URI, RingtoneManager.getDefaultUri(ringtoneType))
+            if (!existingUriStr.isNullOrBlank()) {
+                putExtra(RingtoneManager.EXTRA_RINGTONE_EXISTING_URI, Uri.parse(existingUriStr))
+            }
+        }
+        ringtonePickerLauncher.launch(intent)
+    }
 
     // Biometric toggle
     var biometricEnabled by remember { mutableStateOf(app.prefs.isBiometricAvailable()) }
@@ -717,12 +787,21 @@ fun SettingsScreen(onBack: () -> Unit) {
             Column(
                 modifier = Modifier
                     .fillMaxWidth()
+                    .verticalScroll(rememberScrollState())
                     .padding(horizontal = 20.dp, vertical = 10.dp),
                 verticalArrangement = Arrangement.spacedBy(16.dp)
             ) {
                 Text(
-                    text = "Уведомления",
+                    text = "Уведомления и звуки",
                     style = MaterialTheme.typography.titleLarge,
+                    fontWeight = FontWeight.Bold
+                )
+
+                // ─── SECTION 1: Личные сообщения ───
+                Text(
+                    text = "ЛИЧНЫЕ СООБЩЕНИЯ",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
                     fontWeight = FontWeight.Bold
                 )
 
@@ -732,16 +811,38 @@ fun SettingsScreen(onBack: () -> Unit) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Звук входящих сообщений", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Text("Воспроизводить системный звук при получении", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Звук сообщений", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("Сигнал при входящем личном сообщении", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
-                        checked = notificationsSoundEnabled,
-                        onCheckedChange = { notificationsSoundEnabled = it }
+                        checked = dmSoundEnabled,
+                        onCheckedChange = {
+                            dmSoundEnabled = it
+                            app.prefs.setDmSoundEnabled(it)
+                        }
                     )
                 }
 
-                HorizontalDivider()
+                if (dmSoundEnabled) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { launchRingtonePicker("dm", dmRingtoneUri, RingtoneManager.TYPE_NOTIFICATION) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Мелодия", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = getRingtoneDisplayName(dmRingtoneUri),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -750,15 +851,16 @@ fun SettingsScreen(onBack: () -> Unit) {
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
                         Text("Вибрация", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Text("Вибросигнал при входящих сообщениях", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Вибросигнал при личных сообщениях", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
-                        checked = notificationsVibrationEnabled,
-                        onCheckedChange = { notificationsVibrationEnabled = it }
+                        checked = dmVibrationEnabled,
+                        onCheckedChange = {
+                            dmVibrationEnabled = it
+                            app.prefs.setDmVibrationEnabled(it)
+                        }
                     )
                 }
-
-                HorizontalDivider()
 
                 Row(
                     modifier = Modifier.fillMaxWidth(),
@@ -766,16 +868,169 @@ fun SettingsScreen(onBack: () -> Unit) {
                     horizontalArrangement = Arrangement.SpaceBetween
                 ) {
                     Column(modifier = Modifier.weight(1f)) {
-                        Text("Показывать предпросмотр текста", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
-                        Text("Отображать текст сообщения в системных пушах", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                        Text("Предпросмотр сообщений", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("Показывать текст сообщения в системных пушах", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
                     }
                     Switch(
-                        checked = notificationsPreviewEnabled,
-                        onCheckedChange = { notificationsPreviewEnabled = it }
+                        checked = dmPreviewEnabled,
+                        onCheckedChange = {
+                            dmPreviewEnabled = it
+                            app.prefs.setDmPreviewEnabled(it)
+                        }
                     )
                 }
 
-                Spacer(modifier = Modifier.height(20.dp))
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                // ─── SECTION 2: Групповые чаты ───
+                Text(
+                    text = "ГРУППОВЫЕ ЧАТЫ",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Звук в группах", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("Сигнал при новых сообщениях в группах", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = groupSoundEnabled,
+                        onCheckedChange = {
+                            groupSoundEnabled = it
+                            app.prefs.setGroupSoundEnabled(it)
+                        }
+                    )
+                }
+
+                if (groupSoundEnabled) {
+                    Row(
+                        modifier = Modifier
+                            .fillMaxWidth()
+                            .clickable { launchRingtonePicker("group", groupRingtoneUri, RingtoneManager.TYPE_NOTIFICATION) }
+                            .padding(vertical = 4.dp),
+                        verticalAlignment = Alignment.CenterVertically,
+                        horizontalArrangement = Arrangement.SpaceBetween
+                    ) {
+                        Column(modifier = Modifier.weight(1f)) {
+                            Text("Мелодия групп", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                            Text(
+                                text = getRingtoneDisplayName(groupRingtoneUri),
+                                style = MaterialTheme.typography.bodySmall,
+                                color = MaterialTheme.colorScheme.primary
+                            )
+                        }
+                        Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Вибрация", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("Вибросигнал в группах", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = groupVibrationEnabled,
+                        onCheckedChange = {
+                            groupVibrationEnabled = it
+                            app.prefs.setGroupVibrationEnabled(it)
+                        }
+                    )
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Предпросмотр в группах", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("Показывать автора и текст в пушах групп", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = groupPreviewEnabled,
+                        onCheckedChange = {
+                            groupPreviewEnabled = it
+                            app.prefs.setGroupPreviewEnabled(it)
+                        }
+                    )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                // ─── SECTION 3: Звонки ───
+                Text(
+                    text = "ЗВОНКИ (CONNECT VOIP)",
+                    style = MaterialTheme.typography.labelSmall,
+                    color = MaterialTheme.colorScheme.primary,
+                    fontWeight = FontWeight.Bold
+                )
+
+                Row(
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .clickable { launchRingtonePicker("call", callsRingtoneUri, RingtoneManager.TYPE_RINGTONE) }
+                        .padding(vertical = 4.dp),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Мелодия звонка (Рингтон)", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.SemiBold)
+                        Text(
+                            text = getRingtoneDisplayName(callsRingtoneUri, defaultName = "Системный рингтон вызова"),
+                            style = MaterialTheme.typography.bodySmall,
+                            color = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                    Icon(Icons.AutoMirrored.Rounded.KeyboardArrowRight, contentDescription = null, tint = MaterialTheme.colorScheme.onSurfaceVariant)
+                }
+
+                Row(
+                    modifier = Modifier.fillMaxWidth(),
+                    verticalAlignment = Alignment.CenterVertically,
+                    horizontalArrangement = Arrangement.SpaceBetween
+                ) {
+                    Column(modifier = Modifier.weight(1f)) {
+                        Text("Вибрация при вызове", style = MaterialTheme.typography.titleSmall, fontWeight = FontWeight.Bold)
+                        Text("Вибросигнал при входящем звонке", style = MaterialTheme.typography.bodySmall, color = MaterialTheme.colorScheme.onSurfaceVariant)
+                    }
+                    Switch(
+                        checked = callsVibrationEnabled,
+                        onCheckedChange = {
+                            callsVibrationEnabled = it
+                            app.prefs.setCallsVibrationEnabled(it)
+                        }
+                    )
+                }
+
+                HorizontalDivider(color = MaterialTheme.colorScheme.outlineVariant.copy(alpha = 0.5f))
+
+                // ─── SECTION 4: Системные настройки Android ───
+                FilledTonalButton(
+                    onClick = {
+                        val intent = Intent(android.provider.Settings.ACTION_APP_NOTIFICATION_SETTINGS).apply {
+                            putExtra(android.provider.Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        }
+                        context.startActivity(intent)
+                    },
+                    modifier = Modifier.fillMaxWidth(),
+                    shape = RoundedCornerShape(12.dp)
+                ) {
+                    Icon(Icons.Rounded.Notifications, contentDescription = null, modifier = Modifier.size(18.dp))
+                    Spacer(modifier = Modifier.width(8.dp))
+                    Text("Системные каналы уведомлений Android")
+                }
+
+                Spacer(modifier = Modifier.height(24.dp))
             }
         }
     }

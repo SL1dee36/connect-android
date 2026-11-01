@@ -257,4 +257,77 @@ class PreferencesManager(context: Context) {
     fun setAppLanguage(language: com.connect.app.data.locale.AppLanguage) {
         prefs.edit().putString(KEY_APP_LANGUAGE, language.code).apply()
     }
+
+    // ─── FCM Token ───
+    fun getFcmToken(): String? = prefs.getString("fcm_token", null)
+    fun setFcmToken(token: String?) {
+        if (token == null) prefs.edit().remove("fcm_token").apply()
+        else prefs.edit().putString("fcm_token", token).apply()
+    }
+
+    // ─── Direct Messages Notifications ───
+    fun isDmSoundEnabled(): Boolean = prefs.getBoolean("notif_dm_sound", true)
+    fun setDmSoundEnabled(enabled: Boolean) = prefs.edit().putBoolean("notif_dm_sound", enabled).apply()
+
+    fun isDmVibrationEnabled(): Boolean = prefs.getBoolean("notif_dm_vibration", true)
+    fun setDmVibrationEnabled(enabled: Boolean) = prefs.edit().putBoolean("notif_dm_vibration", enabled).apply()
+
+    fun isDmPreviewEnabled(): Boolean = prefs.getBoolean("notif_dm_preview", true)
+    fun setDmPreviewEnabled(enabled: Boolean) = prefs.edit().putBoolean("notif_dm_preview", enabled).apply()
+
+    fun getDmRingtoneUri(): String? = prefs.getString("notif_dm_ringtone", null)
+    fun setDmRingtoneUri(uri: String?) {
+        if (uri == null) prefs.edit().remove("notif_dm_ringtone").apply()
+        else prefs.edit().putString("notif_dm_ringtone", uri).apply()
+    }
+
+    // ─── Group Notifications ───
+    fun isGroupSoundEnabled(): Boolean = prefs.getBoolean("notif_grp_sound", true)
+    fun setGroupSoundEnabled(enabled: Boolean) = prefs.edit().putBoolean("notif_grp_sound", enabled).apply()
+
+    fun isGroupVibrationEnabled(): Boolean = prefs.getBoolean("notif_grp_vibration", true)
+    fun setGroupVibrationEnabled(enabled: Boolean) = prefs.edit().putBoolean("notif_grp_vibration", enabled).apply()
+
+    fun isGroupPreviewEnabled(): Boolean = prefs.getBoolean("notif_grp_preview", true)
+    fun setGroupPreviewEnabled(enabled: Boolean) = prefs.edit().putBoolean("notif_grp_preview", enabled).apply()
+
+    fun getGroupRingtoneUri(): String? = prefs.getString("notif_grp_ringtone", null)
+    fun setGroupRingtoneUri(uri: String?) {
+        if (uri == null) prefs.edit().remove("notif_grp_ringtone").apply()
+        else prefs.edit().putString("notif_grp_ringtone", uri).apply()
+    }
+
+    // ─── Calls Notifications ───
+    fun isCallsVibrationEnabled(): Boolean = prefs.getBoolean("notif_call_vibration", true)
+    fun setCallsVibrationEnabled(enabled: Boolean) = prefs.edit().putBoolean("notif_call_vibration", enabled).apply()
+
+    fun getCallsRingtoneUri(): String? = prefs.getString("notif_call_ringtone", null)
+    fun setCallsRingtoneUri(uri: String?) {
+        if (uri == null) prefs.edit().remove("notif_call_ringtone").apply()
+        else prefs.edit().putString("notif_call_ringtone", uri).apply()
+    }
+
+    // ─── Room Muting ───
+    fun muteRoom(room: String, durationMillis: Long) {
+        val until = if (durationMillis < 0) -1L else System.currentTimeMillis() + durationMillis
+        prefs.edit().putLong("mute_room_$room", until).apply()
+    }
+
+    fun unmuteRoom(room: String) {
+        prefs.edit().remove("mute_room_$room").apply()
+    }
+
+    fun isRoomMuted(room: String): Boolean {
+        if (!prefs.contains("mute_room_$room")) return false
+        val until = prefs.getLong("mute_room_$room", 0L)
+        if (until == -1L) return true
+        if (System.currentTimeMillis() < until) return true
+        unmuteRoom(room)
+        return false
+    }
+
+    fun getRoomMuteUntil(room: String): Long? {
+        if (!prefs.contains("mute_room_$room")) return null
+        return prefs.getLong("mute_room_$room", 0L)
+    }
 }

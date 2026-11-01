@@ -93,10 +93,12 @@ fun EditAccountSheet(
     var nametagInput by remember { mutableStateOf("") }
     var birthdayInput by remember { mutableStateOf("") }
     var channelInput by remember { mutableStateOf("") }
+    var phonePrivacyInput by remember { mutableStateOf("everyone") }
     var editErrorMessage by remember { mutableStateOf<String?>(null) }
 
     var showDatePickerDialog by remember { mutableStateOf(false) }
     var isChannelDropdownExpanded by remember { mutableStateOf(false) }
+    var isPhonePrivacyDropdownExpanded by remember { mutableStateOf(false) }
     var showLogoutConfirm by remember { mutableStateOf(false) }
 
     // Инициализация при открытии / смене профиля
@@ -107,6 +109,7 @@ fun EditAccountSheet(
         lastNameInput = parts.drop(1).joinToString(" ")
         bioInput = myProfile?.bio ?: ""
         phoneInput = myProfile?.phone ?: ""
+        phonePrivacyInput = myProfile?.phonePrivacy ?: "everyone"
         nametagInput = currentUsername
         birthdayInput = myProfile?.birthday ?: ""
         channelInput = myProfile?.personalChannel ?: ""
@@ -197,6 +200,61 @@ fun EditAccountSheet(
                 shape = RoundedCornerShape(12.dp),
                 modifier = Modifier.fillMaxWidth()
             )
+
+            Spacer(modifier = Modifier.height(10.dp))
+
+            // Приватность номера телефона
+            ExposedDropdownMenuBox(
+                expanded = isPhonePrivacyDropdownExpanded,
+                onExpandedChange = { isPhonePrivacyDropdownExpanded = it }
+            ) {
+                val privacyLabel = when (phonePrivacyInput) {
+                    "friends" -> "Только контакты и друзья"
+                    "hidden" -> "Никто (скрыт)"
+                    else -> "Все пользователи"
+                }
+                OutlinedTextField(
+                    value = privacyLabel,
+                    onValueChange = {},
+                    readOnly = true,
+                    label = { Text("Кто видит мой номер") },
+                    trailingIcon = {
+                        ExposedDropdownMenuDefaults.TrailingIcon(expanded = isPhonePrivacyDropdownExpanded)
+                    },
+                    colors = ExposedDropdownMenuDefaults.outlinedTextFieldColors(),
+                    shape = RoundedCornerShape(12.dp),
+                    modifier = Modifier
+                        .fillMaxWidth()
+                        .menuAnchor(androidx.compose.material3.MenuAnchorType.PrimaryNotEditable, enabled = true)
+                )
+
+                ExposedDropdownMenu(
+                    expanded = isPhonePrivacyDropdownExpanded,
+                    onDismissRequest = { isPhonePrivacyDropdownExpanded = false }
+                ) {
+                    DropdownMenuItem(
+                        text = { Text("Все пользователи") },
+                        onClick = {
+                            phonePrivacyInput = "everyone"
+                            isPhonePrivacyDropdownExpanded = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Только контакты и друзья") },
+                        onClick = {
+                            phonePrivacyInput = "friends"
+                            isPhonePrivacyDropdownExpanded = false
+                        }
+                    )
+                    DropdownMenuItem(
+                        text = { Text("Никто (скрыт)") },
+                        onClick = {
+                            phonePrivacyInput = "hidden"
+                            isPhonePrivacyDropdownExpanded = false
+                        }
+                    )
+                }
+            }
 
             Spacer(modifier = Modifier.height(10.dp))
 
@@ -341,7 +399,8 @@ fun EditAccountSheet(
                         newUsername = newName,
                         birthday = birthdayInput.trim(),
                         personalChannel = channelInput.trim(),
-                        profileColor = effectiveColorId
+                        profileColor = effectiveColorId,
+                        phonePrivacy = phonePrivacyInput
                     )
 
                     onDismiss()

@@ -47,8 +47,10 @@ import androidx.compose.material.icons.automirrored.rounded.ArrowBack
 import androidx.compose.material.icons.automirrored.rounded.Reply
 import androidx.compose.material.icons.automirrored.rounded.Send
 import androidx.compose.material.icons.rounded.AttachFile
+import androidx.compose.material.icons.rounded.Call
 import androidx.compose.material.icons.rounded.Check
 import androidx.compose.material.icons.rounded.Close
+import androidx.compose.material.icons.rounded.MoreVert
 import androidx.compose.material.icons.rounded.ContentCopy
 import androidx.compose.material.icons.rounded.Delete
 import androidx.compose.material.icons.rounded.DoneAll
@@ -63,15 +65,20 @@ import androidx.compose.material.icons.rounded.Pause
 import androidx.compose.material.icons.rounded.Stop
 import androidx.compose.material.icons.rounded.InsertDriveFile
 import androidx.compose.material.icons.rounded.Mic
+import androidx.compose.material.icons.rounded.Notifications
+import androidx.compose.material.icons.rounded.NotificationsOff
 import androidx.compose.material.icons.rounded.Videocam
 import androidx.compose.material3.AlertDialog
 import androidx.compose.material3.CircularProgressIndicator
+import androidx.compose.material3.DropdownMenu
+import androidx.compose.material3.DropdownMenuItem
 import androidx.compose.material3.ExperimentalMaterial3Api
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
 import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.ModalBottomSheet
+import android.widget.Toast
 import com.connect.app.ui.components.VoiceMessageBubble
 import com.connect.app.ui.components.VideoNoteBubble
 import com.connect.app.ui.components.RoundCameraRecordOverlay
@@ -176,6 +183,9 @@ fun ChatDetailScreen(
     var showAttachmentSheet by remember { mutableStateOf(false) }
     var isUploading by remember { mutableStateOf(false) }
     var uploadStatusText by remember { mutableStateOf("") }
+    var showCallSheet by remember { mutableStateOf(false) }
+    var showOptionsMenu by remember { mutableStateOf(false) }
+    var isRoomMutedState by remember(room) { mutableStateOf(app.prefs.isRoomMuted(room)) }
 
     // Voice and Round Video Note State
     val audioRecorder = remember { AudioRecorder(context) }
@@ -481,12 +491,109 @@ fun ChatDetailScreen(
                             tint = MaterialTheme.colorScheme.primary
                         )
                     }
+                } else {
+                    IconButton(onClick = { showCallSheet = true }) {
+                        Icon(
+                            imageVector = Icons.Rounded.Call,
+                            contentDescription = "Call",
+                            tint = MaterialTheme.colorScheme.primary
+                        )
+                    }
+                }
+
+                Box {
+                    IconButton(onClick = { showOptionsMenu = true }) {
+                        Icon(
+                            imageVector = if (isRoomMutedState) Icons.Rounded.NotificationsOff else Icons.Rounded.MoreVert,
+                            contentDescription = "More Options",
+                            tint = if (isRoomMutedState) MaterialTheme.colorScheme.error else MaterialTheme.colorScheme.onSurfaceVariant
+                        )
+                    }
+
+                    DropdownMenu(
+                        expanded = showOptionsMenu,
+                        onDismissRequest = { showOptionsMenu = false }
+                    ) {
+                        if (isRoomMutedState) {
+                            DropdownMenuItem(
+                                text = { Text("Включить уведомления") },
+                                onClick = {
+                                    showOptionsMenu = false
+                                    app.prefs.unmuteRoom(room)
+                                    isRoomMutedState = false
+                                    Toast.makeText(context, "Уведомления включены", Toast.LENGTH_SHORT).show()
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.Notifications, contentDescription = null, tint = MaterialTheme.colorScheme.primary)
+                                }
+                            )
+                        } else {
+                            DropdownMenuItem(
+                                text = { Text("Заглушить на 1 час") },
+                                onClick = {
+                                    showOptionsMenu = false
+                                    app.prefs.muteRoom(room, 3600_000L)
+                                    isRoomMutedState = true
+                                    Toast.makeText(context, "Уведомления заглушены на 1 час", Toast.LENGTH_SHORT).show()
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.NotificationsOff, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Заглушить на 8 часов") },
+                                onClick = {
+                                    showOptionsMenu = false
+                                    app.prefs.muteRoom(room, 8 * 3600_000L)
+                                    isRoomMutedState = true
+                                    Toast.makeText(context, "Уведомления заглушены на 8 часов", Toast.LENGTH_SHORT).show()
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.NotificationsOff, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Заглушить на 1 день") },
+                                onClick = {
+                                    showOptionsMenu = false
+                                    app.prefs.muteRoom(room, 24 * 3600_000L)
+                                    isRoomMutedState = true
+                                    Toast.makeText(context, "Уведомления заглушены на 1 день", Toast.LENGTH_SHORT).show()
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.NotificationsOff, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                }
+                            )
+                            DropdownMenuItem(
+                                text = { Text("Заглушить навсегда") },
+                                onClick = {
+                                    showOptionsMenu = false
+                                    app.prefs.muteRoom(room, -1L)
+                                    isRoomMutedState = true
+                                    Toast.makeText(context, "Уведомления заглушены", Toast.LENGTH_SHORT).show()
+                                },
+                                leadingIcon = {
+                                    Icon(Icons.Rounded.NotificationsOff, contentDescription = null, tint = MaterialTheme.colorScheme.error)
+                                }
+                            )
+                        }
+                    }
                 }
             },
             colors = TopAppBarDefaults.topAppBarColors(
                 containerColor = MaterialTheme.colorScheme.surfaceContainer
             )
         )
+
+        if (showCallSheet) {
+            com.connect.app.ui.components.CallSelectionBottomSheet(
+                targetUsername = peerUsername,
+                targetDisplayName = title,
+                targetPhone = null,
+                room = room,
+                onDismiss = { showCallSheet = false }
+            )
+        }
 
         // UPLOAD PROGRESS BAR
         AnimatedVisibility(visible = isUploading) {

@@ -22,6 +22,7 @@ class ConnectApplication : Application(), ImageLoaderFactory {
     lateinit var apiClient: ApiClient private set
     lateinit var socketManager: SocketManager private set
     lateinit var localizationManager: LocalizationManager private set
+    lateinit var callManager: com.connect.app.webrtc.WebRtcCallManager private set
 
     override fun onCreate() {
         super.onCreate()
@@ -30,6 +31,10 @@ class ConnectApplication : Application(), ImageLoaderFactory {
         localizationManager = LocalizationManager(prefs)
         apiClient = ApiClient(prefs)
         socketManager = SocketManager(prefs)
+        callManager = com.connect.app.webrtc.WebRtcCallManager(this, socketManager)
+
+        // Initialize Android notification channels
+        com.connect.app.notifications.NotificationHelper.createNotificationChannels(this)
 
         // Automatically connect socket if token is already present
         if (!prefs.getToken().isNullOrBlank()) {

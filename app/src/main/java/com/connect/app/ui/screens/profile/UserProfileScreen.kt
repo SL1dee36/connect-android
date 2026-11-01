@@ -119,6 +119,7 @@ fun UserProfileScreen(
     var showOverrideDialog by remember { mutableStateOf(false) }
     var overrideDisplayName by remember { mutableStateOf("") }
     var fullscreenMediaUrl by remember { mutableStateOf<String?>(null) }
+    var showCallSheet by remember { mutableStateOf(false) }
 
     val scrollState = rememberScrollState()
     val expandProgress = remember { Animatable(0f) }
@@ -489,7 +490,7 @@ fun UserProfileScreen(
                                 icon = Icons.Rounded.Call,
                                 label = "Позвонить",
                                 onClick = {
-                                    Toast.makeText(context, "Вызов пользователя @$targetUsername...", Toast.LENGTH_SHORT).show()
+                                    showCallSheet = true
                                 },
                                 modifier = Modifier.weight(1f)
                             )
@@ -511,6 +512,17 @@ fun UserProfileScreen(
                         }
                         Spacer(modifier = Modifier.height(4.dp))
                     }
+                }
+
+                if (showCallSheet) {
+                    val dmRoom = listOf(myUsername, targetUsername).sorted().joinToString("_")
+                    com.connect.app.ui.components.CallSelectionBottomSheet(
+                        targetUsername = targetUsername,
+                        targetDisplayName = effectiveName,
+                        targetPhone = user.phone,
+                        room = dmRoom,
+                        onDismiss = { showCallSheet = false }
+                    )
                 }
 
                 Spacer(modifier = Modifier.height(14.dp))

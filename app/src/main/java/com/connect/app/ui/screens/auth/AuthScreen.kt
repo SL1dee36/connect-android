@@ -30,6 +30,7 @@ import androidx.compose.material.icons.rounded.Dns
 import androidx.compose.material.icons.rounded.Fingerprint
 import androidx.compose.material.icons.rounded.Lock
 import androidx.compose.material.icons.rounded.Person
+import androidx.compose.material.icons.rounded.Phone
 import androidx.compose.material.icons.rounded.Visibility
 import androidx.compose.material.icons.rounded.VisibilityOff
 import androidx.compose.material3.AlertDialog
@@ -64,6 +65,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.platform.LocalFocusManager
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.ImeAction
+import androidx.compose.ui.text.input.KeyboardType
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.text.input.VisualTransformation
 import androidx.compose.ui.text.style.TextAlign
@@ -86,6 +88,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
     var username by remember { mutableStateOf(app.prefs.getBiometricUser()?.username ?: "") }
     var password by remember { mutableStateOf("") }
     var confirmPassword by remember { mutableStateOf("") }
+    var phone by remember { mutableStateOf("") }
     var isPasswordVisible by remember { mutableStateOf(false) }
     var isConfirmPasswordVisible by remember { mutableStateOf(false) }
 
@@ -174,7 +177,7 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
         scope.launch {
             try {
                 val api = app.apiClient.service
-                val req = AuthRequest(username.trim(), password)
+                val req = AuthRequest(username.trim(), password, phone.trim().takeIf { it.isNotBlank() && selectedTab == 1 })
                 val response = if (selectedTab == 0) {
                     api.login(req)
                 } else {
@@ -413,7 +416,40 @@ fun AuthScreen(onLoginSuccess: () -> Unit) {
                                 singleLine = true,
                                 shape = RoundedCornerShape(16.dp),
                                 modifier = Modifier.fillMaxWidth(),
-                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Done),
+                                keyboardOptions = KeyboardOptions(imeAction = ImeAction.Next),
+                                keyboardActions = KeyboardActions(onNext = {
+                                    focusManager.moveFocus(FocusDirection.Down)
+                                }),
+                                colors = OutlinedTextFieldDefaults.colors(
+                                    focusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    unfocusedContainerColor = MaterialTheme.colorScheme.surfaceContainerHigh,
+                                    focusedBorderColor = MaterialTheme.colorScheme.primary,
+                                    unfocusedBorderColor = MaterialTheme.colorScheme.outlineVariant
+                                )
+                            )
+
+                            Spacer(modifier = Modifier.height(16.dp))
+                            OutlinedTextField(
+                                value = phone,
+                                onValueChange = {
+                                    phone = it.filter { ch -> ch.isDigit() || ch == '+' }.take(16)
+                                },
+                                label = { Text("Номер телефона (необязательно)") },
+                                placeholder = { Text("+7 (999) 000-00-00") },
+                                leadingIcon = {
+                                    Icon(
+                                        imageVector = Icons.Rounded.Phone,
+                                        contentDescription = null,
+                                        tint = MaterialTheme.colorScheme.onSurfaceVariant
+                                    )
+                                },
+                                singleLine = true,
+                                shape = RoundedCornerShape(16.dp),
+                                modifier = Modifier.fillMaxWidth(),
+                                keyboardOptions = KeyboardOptions(
+                                    keyboardType = KeyboardType.Phone,
+                                    imeAction = ImeAction.Done
+                                ),
                                 keyboardActions = KeyboardActions(onDone = {
                                     focusManager.clearFocus()
                                     submit()

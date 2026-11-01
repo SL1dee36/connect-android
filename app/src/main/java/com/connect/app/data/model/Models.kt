@@ -19,6 +19,7 @@ data class UserProfile(
     val phone: String? = null,
     @SerializedName("avatar_url") val avatarUrl: String? = null,
     @SerializedName("notifications_enabled") val notificationsEnabled: Int = 1,
+    @SerializedName("phone_privacy") val phonePrivacy: String = "everyone",
     val isFriend: Boolean = false,
     val isGlobalMod: Boolean = false,
     val media: List<UserMediaItem> = emptyList(),
@@ -49,6 +50,7 @@ data class UpdateProfileRequest(
     val bio: String? = null,
     val phone: String? = null,
     @SerializedName("notifications_enabled") val notificationsEnabled: Boolean = true,
+    @SerializedName("phone_privacy") val phonePrivacy: String? = null,
     val birthday: String? = null,
     @SerializedName("personal_channel") val personalChannel: String? = null,
     @SerializedName("profile_color") val profileColor: String? = null
@@ -140,7 +142,8 @@ data class NotificationItem(
 
 data class AuthRequest(
     val username: String,
-    val password: String
+    val password: String,
+    val phone: String? = null
 )
 
 data class AuthResponse(
@@ -210,4 +213,26 @@ data class ChatItem(
     val unreadCount: Int = 0,
     val isOnline: Boolean = false,
     val peerUsername: String? = null
+)
+
+data class MatchedContact(
+    val username: String,
+    @SerializedName("displayName") val displayName: String,
+    @SerializedName("avatarUrl") val avatarUrl: String? = null,
+    val phone: String? = null,
+    @SerializedName("matchedPhone") val matchedPhone: String? = null,
+    val isFriend: Boolean = false
+) {
+    val bestName: String get() = if (displayName.isNotBlank()) displayName else username
+}
+
+data class MatchPhonesResponse(
+    val matches: List<MatchedContact> = emptyList()
+)
+
+data class DeviceContact(
+    val id: String,
+    val name: String,
+    val phoneNumber: String,
+    val normalizedPhone: String
 )
