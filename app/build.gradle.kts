@@ -13,8 +13,8 @@ android {
         applicationId = "com.connect.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 242
-        versionName = "2.4.2"
+        versionCode = 251
+        versionName = "2.5.1"
 
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
         vectorDrawables {
